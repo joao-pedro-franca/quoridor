@@ -3,6 +3,7 @@ package br.edu.quoridor.modelo;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
+import java.util.Objects;
 import java.util.HashSet;
 
 /** Retrato imutável de uma partida; listas e jogadores não podem ser alterados. */
@@ -14,6 +15,8 @@ public final class EstadoJogo implements Serializable {
     private final List<Barreira> barreiras;
     private final int jogadorDaVez;
     private final Integer vencedor;
+    private final SituacaoPartida situacao;
+    private final Integer jogadorAbandono;
 
     public EstadoJogo() {
         this(List.of(
@@ -27,6 +30,12 @@ public final class EstadoJogo implements Serializable {
     /** Copia os dados recebidos. A validação das jogadas pertence ao motor de regras. */
     public EstadoJogo(List<Jogador> jogadores, List<Barreira> barreiras,
                       int jogadorDaVez, Integer vencedor) {
+        this(jogadores, barreiras, jogadorDaVez, vencedor,
+                vencedor == null ? SituacaoPartida.EM_ANDAMENTO : SituacaoPartida.ENCERRADA_POR_VITORIA, null);
+    }
+
+    public EstadoJogo(List<Jogador> jogadores, List<Barreira> barreiras, int jogadorDaVez,
+                      Integer vencedor, SituacaoPartida situacao, Integer jogadorAbandono) {
         this.jogadores = List.copyOf(jogadores);
         this.barreiras = List.copyOf(barreiras);
         if (this.jogadores.size() != 4) {
@@ -45,6 +54,13 @@ public final class EstadoJogo implements Serializable {
         }
         this.jogadorDaVez = jogadorDaVez;
         this.vencedor = vencedor;
+        this.situacao = Objects.requireNonNull(situacao);
+        if ((situacao == SituacaoPartida.ENCERRADA_POR_VITORIA) != (vencedor != null)
+                || (situacao == SituacaoPartida.ENCERRADA_POR_ABANDONO) != (jogadorAbandono != null)
+                || (jogadorAbandono != null && (jogadorAbandono < 1 || jogadorAbandono > 4))) {
+            throw new IllegalArgumentException("Situação, vencedor e responsável pelo abandono inconsistentes.");
+        }
+        this.jogadorAbandono = jogadorAbandono;
     }
 
     public List<Jogador> getJogadores() {
@@ -64,7 +80,14 @@ public final class EstadoJogo implements Serializable {
         return vencedor;
     }
 
+    public SituacaoPartida getSituacao() { return situacao; }
+
+    public Integer getJogadorAbandono() { return jogadorAbandono; }
+
+    public boolean isPausada() { return situacao == SituacaoPartida.PAUSADA; }
+
     public boolean isFinalizada() {
-        return vencedor != null;
+        return situacao == SituacaoPartida.ENCERRADA_POR_VITORIA
+                || situacao == SituacaoPartida.ENCERRADA_POR_ABANDONO;
     }
 }

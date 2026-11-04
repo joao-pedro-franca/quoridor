@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(30)
 class IntegracaoRmiTest {
+    private final java.util.concurrent.atomic.AtomicLong nanos = new java.util.concurrent.atomic.AtomicLong();
     private Registry registro;
     private ServicoJogo servico;
     private JogoRemoto remoto;
@@ -24,7 +25,9 @@ class IntegracaoRmiTest {
     void publicarEmRegistroRealComPortaTemporaria() throws Exception {
         // Porta 0: o RMI escolhe uma porta livre, sem disputar a 1099 de demonstração.
         registro = LocateRegistry.createRegistry(0);
-        servico = novoServico();
+        servico = new ServicoJogo(new java.util.Random() {
+            @Override public int nextInt(int limite) { return 0; }
+        }, nanos::get);
         registro.bind("Quoridor", servico);
         Registry registroRemoto = (Registry) UnicastRemoteObject.toStub(registro);
         remoto = (JogoRemoto) registroRemoto.lookup("Quoridor");
@@ -102,4 +105,32 @@ class IntegracaoRmiTest {
         servico.close();
         assertThrows(RemoteException.class, () -> remoto.consultarEstado());
     }
+    @Test
+    void heartbeatDesconexaoReconexaoEAbandonoAtravessamRmi() throws Exception {
+        var registros = registrarQuatro(remoto);
+        assertTrue(remoto.heartbeat(registros.get(0).token()).sucesso());
+        assertFalse(remoto.heartbeat("invalido").sucesso());
+        assertFalse(remoto.desconectar("invalido").sucesso());
+        assertTrue(remoto.desconectar(registros.get(1).token()).sucesso());
+        EstadoServico pausado = remoto.consultarEstado();
+        assertTrue(pausado.jogo().isPausada());
+        assertEquals(new PresencaJogador(2, false, 180), pausado.presencas().get(1));
+        assertThrows(UnsupportedOperationException.class, () -> pausado.presencas().clear());
+        assertFalse(remoto.mover(registros.get(0).token(), 1, 4).sucesso());
+        nanos.set(java.util.concurrent.TimeUnit.SECONDS.toNanos(5));
+        assertEquals(175, remoto.consultarEstado().presencas().get(1).segundosRestantes());
+        assertTrue(remoto.reconectar(registros.get(1).token()).sucesso());
+        assertEquals(SituacaoPartida.EM_ANDAMENTO, remoto.consultarEstado().jogo().getSituacao());
+        assertEquals(180, pausado.presencas().get(1).segundosRestantes());
+        assertTrue(pausado.jogo().isPausada()); // Cópia anterior permanece imutável.
+        remoto.desconectar(registros.get(2).token());
+        nanos.addAndGet(java.util.concurrent.TimeUnit.SECONDS.toNanos(180));
+        EstadoServico fim = remoto.consultarEstado();
+        assertTrue(fim.jogo().isFinalizada());
+        assertNull(fim.jogo().getVencedor());
+        assertEquals(Integer.valueOf(3), fim.jogo().getJogadorAbandono());
+        assertEquals(SituacaoPartida.ENCERRADA_POR_ABANDONO, fim.jogo().getSituacao());
+        assertFalse(remoto.reconectar(registros.get(2).token()).sucesso());
+    }
+
 }

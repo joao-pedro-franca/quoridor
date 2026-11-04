@@ -88,10 +88,36 @@ public final class Partida {
         if (estado.isFinalizada()) {
             return rejeitar("A partida já terminou.");
         }
+        if (estado.isPausada()) {
+            return rejeitar("Partida pausada. Aguardando reconexão.");
+        }
         if (jogadorId != estado.getJogadorDaVez()) {
             return rejeitar("A ação deve ser realizada pelo jogador da vez.");
         }
         return null;
+    }
+
+    public void pausar() {
+        if (!estado.isFinalizada() && !estado.isPausada()) {
+            alterarSituacao(SituacaoPartida.PAUSADA, null);
+        }
+    }
+
+    public void retomar() {
+        if (estado.isPausada()) {
+            alterarSituacao(SituacaoPartida.EM_ANDAMENTO, null);
+        }
+    }
+
+    public void encerrarPorAbandono(int jogadorId) {
+        if (!estado.isFinalizada()) {
+            alterarSituacao(SituacaoPartida.ENCERRADA_POR_ABANDONO, jogadorId);
+        }
+    }
+
+    private void alterarSituacao(SituacaoPartida situacao, Integer jogadorAbandono) {
+        estado = new EstadoJogo(estado.getJogadores(), estado.getBarreiras(),
+                estado.getJogadorDaVez(), null, situacao, jogadorAbandono);
     }
 
     private int proximoJogador() {

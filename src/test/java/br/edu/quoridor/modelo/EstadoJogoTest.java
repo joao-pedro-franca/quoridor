@@ -56,4 +56,29 @@ class EstadoJogoTest {
         assertThrows(IllegalArgumentException.class, () -> new EstadoJogo(jogadores, List.of(), 1, 0));
         assertThrows(IllegalArgumentException.class, () -> new EstadoJogo(jogadores, List.of(), 1, 5));
     }
+    @Test
+    void representaAbandonoSemInventarVencedorEPreservaConstrutorAnterior() {
+        EstadoJogo inicial = new EstadoJogo();
+        assertEquals(SituacaoPartida.EM_ANDAMENTO, inicial.getSituacao());
+        EstadoJogo abandono = new EstadoJogo(inicial.getJogadores(), java.util.List.of(), 3,
+                null, SituacaoPartida.ENCERRADA_POR_ABANDONO, 2);
+        assertTrue(abandono.isFinalizada());
+        assertFalse(abandono.isPausada());
+        assertNull(abandono.getVencedor());
+        assertEquals(Integer.valueOf(2), abandono.getJogadorAbandono());
+        EstadoJogo vitoria = new EstadoJogo(inicial.getJogadores(), java.util.List.of(), 1, 1);
+        assertEquals(SituacaoPartida.ENCERRADA_POR_VITORIA, vitoria.getSituacao());
+    }
+
+    @Test
+    void rejeitaCombinacoesInconsistentesDeSituacaoEVencedor() {
+        var jogadores = new EstadoJogo().getJogadores();
+        assertThrows(IllegalArgumentException.class, () -> new EstadoJogo(jogadores,
+                java.util.List.of(), 1, 2, SituacaoPartida.PAUSADA, null));
+        assertThrows(IllegalArgumentException.class, () -> new EstadoJogo(jogadores,
+                java.util.List.of(), 1, null, SituacaoPartida.ENCERRADA_POR_ABANDONO, null));
+        assertThrows(IllegalArgumentException.class, () -> new EstadoJogo(jogadores,
+                java.util.List.of(), 1, null, SituacaoPartida.ENCERRADA_POR_ABANDONO, 5));
+    }
+
 }

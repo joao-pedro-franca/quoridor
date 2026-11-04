@@ -60,7 +60,7 @@ final class TerminalCLI {
         if (interativo) {
             saida.print("\033[24;1H\033[2K");
         }
-        saida.println("Cliente encerrado. Sua vaga permanece reservada para reconexão.");
+        saida.println("Cliente encerrado.");
         saida.flush();
     }
 

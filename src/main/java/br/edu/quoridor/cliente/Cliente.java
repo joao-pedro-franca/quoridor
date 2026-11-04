@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Cliente de terminal: converte comandos e consulta o servidor, sem aplicar regras. */
 public final class Cliente {
+    private static final long HEARTBEAT_NANOS = TimeUnit.SECONDS.toNanos(3);
     private static final long INTERVALO_NANOS = TimeUnit.SECONDS.toNanos(1);
     private static final String AJUDA = """
             ajuda                       Mostra esta ajuda.
@@ -45,6 +46,7 @@ public final class Cliente {
     private String desenho;
     private String mensagem = "";
     private ComandoCLI barreiraPendente;
+    private boolean saidaNotificada;
 
     Cliente(JogoRemoto jogo, BufferedReader entrada, PrintWriter saida, boolean interativo) {
         this.jogo = jogo;
@@ -124,8 +126,19 @@ public final class Cliente {
         leitor.setDaemon(true); // A leitura nativa do console pode não responder a interrupt().
         leitor.start();
         long proximaConsulta = System.nanoTime() + INTERVALO_NANOS;
+        long proximoHeartbeat = System.nanoTime() + HEARTBEAT_NANOS;
         try {
             while (!Thread.currentThread().isInterrupted()) {
+                long agora = System.nanoTime();
+                if (!estado.jogo().isFinalizada() && agora - proximoHeartbeat >= 0) {
+                    ResultadoAcao resposta = jogo.heartbeat(registro.token());
+                    if (!resposta.sucesso()) {
+                        atualizar(true);
+                        if (!estado.jogo().isFinalizada()) { mostrarMensagem(resposta.mensagem()); }
+                        break;
+                    }
+                    proximoHeartbeat = System.nanoTime() + HEARTBEAT_NANOS;
+                }
                 long restante = proximaConsulta - System.nanoTime();
                 if (restante <= 0) {
                     if (!estado.jogo().isFinalizada()) {
@@ -133,6 +146,9 @@ public final class Cliente {
                     }
                     proximaConsulta = System.nanoTime() + INTERVALO_NANOS;
                     restante = INTERVALO_NANOS;
+                }
+                if (!estado.jogo().isFinalizada()) {
+                    restante = Math.min(restante, Math.max(0, proximoHeartbeat - System.nanoTime()));
                 }
                 Entrada recebida = linhas.poll(restante, TimeUnit.NANOSECONDS);
                 if (recebida == null) {
@@ -156,6 +172,7 @@ public final class Cliente {
             Thread.currentThread().interrupt();
         } finally {
             leitor.interrupt();
+            notificarSaida();
             terminal.finalizar();
         }
     }
@@ -184,7 +201,7 @@ public final class Cliente {
             return true;
         }
         switch (comando.tipo()) {
-            case SAIR -> { return false; }
+            case SAIR -> { notificarSaida(); return false; }
             case AJUDA -> terminal.mostrar(AJUDA, "Use tabuleiro para voltar ao jogo.", true);
             case SESSAO -> mostrarMensagem("Seu token: " + registro.token());
             case TABULEIRO -> atualizar(true);
@@ -202,6 +219,7 @@ public final class Cliente {
         String resposta = texto.strip();
         if (resposta.equalsIgnoreCase("sair")) {
             barreiraPendente = null;
+            notificarSaida();
             return false;
         }
         if (resposta.equalsIgnoreCase("N")) {
@@ -228,6 +246,12 @@ public final class Cliente {
         String novoDesenho = barreiraPendente == null ? TabuleiroCLI.desenhar(novo, registro.jogadorId())
                 : TabuleiroCLI.previsualizar(novo, registro.jogadorId(), new Barreira(
                         barreiraPendente.linha(), barreiraPendente.coluna(), barreiraPendente.orientacao()));
+        if (estado != null && estado.jogo().isPausada() && !novo.jogo().isPausada()
+                && !novo.jogo().isFinalizada() && barreiraPendente == null) {
+            String retornaram = estado.presencas().stream().filter(p -> !p.conectado())
+                    .map(p -> Integer.toString(p.jogadorId())).collect(java.util.stream.Collectors.joining(", "));
+            mensagem = "Jogador(es) " + retornaram + " reconectou! Todos conectados. Partida retomada.";
+        }
         estado = novo;
         if (forcar || !novoDesenho.equals(desenho)) {
             desenho = novoDesenho;
@@ -238,6 +262,15 @@ public final class Cliente {
     private void mostrarMensagem(String texto) {
         mensagem = texto;
         terminal.mostrar(desenho, mensagem, true);
+    }
+
+    private void notificarSaida() {
+        if (saidaNotificada || registro == null || !registro.sucesso()) { return; }
+        saidaNotificada = true;
+        try { jogo.desconectar(registro.token()); }
+        catch (RemoteException indisponivel) {
+            // Sem comunicação, o servidor detectará a ausência de heartbeat.
+        }
     }
 
     private record Entrada(String linha, IOException erro) {

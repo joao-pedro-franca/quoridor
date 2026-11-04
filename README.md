@@ -80,14 +80,59 @@ A demonstração prevista é em localhost; o servidor anuncia referências para
 
 ### Encerrar e reconectar
 
-- No cliente, use `sair`, Ctrl+C ou fim da entrada. A vaga permanece reservada.
+- No cliente, `sair` e fim da entrada notificam a desconexão imediatamente.
+  Ctrl+C ou encerramento abrupto são detectados pela ausência de heartbeat.
+  A vaga permanece reservada durante o prazo de reconexão.
 - Para retornar, inicie outro cliente e informe o token original quando solicitado.
-  `reconectar` recupera o mesmo ID sem criar uma quinta vaga.
+  `reconectar` recupera o mesmo ID sem criar uma quinta vaga, dentro de 180 segundos
+  da detecção. O jogo fica pausado enquanto houver qualquer participante ausente.
 - Para encerrar o servidor, pressione **Ctrl+C no terminal 1**. O gancho de
   encerramento remove a publicação e libera o serviço. O registro RMI é liberado
   somente se tiver sido criado por esse processo.
 - Para uma nova partida, encerre e reinicie o servidor e os clientes. Não existe
   comando de reinício durante uma sessão. Partida e tokens ficam apenas em memória.
+
+### Heartbeat, pausa e abandono
+
+Cada cliente registrado envia `heartbeat(token)` por RMI a cada **3 segundos**,
+no mesmo laço que consulta o estado. Isso funciona mesmo sem jogadas, aguardando
+o turno ou com um comando parcialmente digitado. Não há nova thread de heartbeat
+por cliente. Heartbeats não alteram peões, barreiras, estoques ou turno.
+
+O servidor usa `System.nanoTime()` e um único `ScheduledExecutorService` para
+verificar as conexões a cada **250 ms**, além da verificação antes das chamadas.
+Dez segundos sem heartbeat marcam uma sessão registrada como desconectada.
+O instante de detecção é a fronteira `último heartbeat + 10 s`, para que atrasos
+do agendador não alonguem o prazo. Um `sair` recebido marca a ausência no instante
+da notificação. Jogadores ainda não registrados não têm timeout.
+
+A partida pausa preservando todo o tabuleiro, estoque e jogador da vez. Cada
+sessão ausente recebe seu próprio prazo de **180 segundos**. O snapshot
+`EstadoServico.presencas()` informa ID, conexão e segundos restantes calculados
+no servidor (arredondados para cima); nenhum instante monotônico ou token é exposto.
+A CLI mostra `PARTIDA PAUSADA`, os ausentes e os tempos em `MM:SS` sem alterar
+peões para indicar desconexão. O prazo vale também para participantes já
+registrados enquanto aguardam o quarto registro.
+
+Consultas, notificações repetidas e heartbeats de uma sessão já desconectada
+não reiniciam esse prazo. Para voltar, é necessário `reconectar(token)` antes
+da expiração. A sessão original é preservada; quando todos os registrados estão
+conectados, o jogo retoma com o mesmo turno. Com mais de um ausente, retornar
+apenas um não retoma a partida. No instante exato de 180 segundos o prazo já expirou.
+
+Quando qualquer prazo expira, o servidor encerra a partida **por abandono, sem
+vencedor**, mesmo sem novas consultas dos clientes. `EstadoJogo.getSituacao()`
+distingue `EM_ANDAMENTO`, `PAUSADA`, `ENCERRADA_POR_VITORIA` e
+`ENCERRADA_POR_ABANDONO`. Neste último caso, `getVencedor()` continua `null` e
+`getJogadorAbandono()` informa quem não voltou. Se prazos empatarem, o menor ID
+é registrado. Ações, heartbeats e reconexões não reiniciam uma partida abandonada.
+Após vitória, não se iniciam prazos de abandono.
+
+O monitor e todos os métodos RMI usam o mesmo `synchronized`: detectar, reconectar,
+aplicar jogadas e encerrar são decisões atômicas. Cada operação de presença usa
+um único instante do relógio. O `close()` do serviço encerra o monitor e a exportação;
+o gancho de encerramento do servidor já chama esse método. Não há persistência
+ou substituição de jogadores.
 
 ## Comandos da CLI
 
@@ -200,7 +245,8 @@ APRESENTACAO.md                 Roteiro curto e perguntas técnicas
    e os enums são serializáveis pelo Java. Não é necessário gerar stubs com `rmic`.
 
 O contrato oferece `registrar()`, `reconectar(token)`, `consultarEstado()`,
-`mover(token, linha, coluna)` e `colocarBarreira(token, linha, coluna, orientacao)`.
+`mover(token, linha, coluna)`, `colocarBarreira(token, linha, coluna, orientacao)`,
+`heartbeat(token)` e `desconectar(token)`.
 Os parâmetros de ações usam índices internos a partir de zero.
 
 ### Autoridade, sessões e concorrência
@@ -215,7 +261,8 @@ o ID é obtido pelo token. Quatro participantes precisam estar registrados para
 agir. A posse do token representa a identidade da sessão; não há senha adicional.
 
 Todos os métodos remotos do serviço são `synchronized` no mesmo objeto.
-Autenticar, verificar os registros e aplicar a ação acontecem na mesma seção
+O monitor periódico também usa esse bloqueio. Autenticar, verificar os registros
+e aplicar a ação acontecem na mesma seção
 crítica. Consultas e registros usam esse mesmo monitor. A proteção concorrente
 fica no serviço: `Partida` não é oferecida diretamente aos clientes.
 
@@ -228,13 +275,13 @@ inalterados depois de novas jogadas.
 
 Cada cliente consulta o servidor aproximadamente a cada segundo, sem callbacks.
 Um laço único faz RPC e escreve na tela; uma thread daemon lê comandos e os
-coloca numa fila. A espera na fila tem prazo até a próxima consulta, permitindo
+coloca numa fila. A espera na fila tem prazo até a próxima consulta ou heartbeat, permitindo
 atualizações mesmo sem pressionar Enter. Comandos podem provocar consultas adicionais.
 
 O conteúdo é comparado ao desenho anterior para evitar redesenhos periódicos
 sem mudanças. No console interativo, o painel usa 23 linhas e o prompt fica na
 linha 24; sequências ANSI salvam/restauram o cursor. Com redirecionamento, a saída
-é texto simples. Após vitória, as consultas periódicas param; comandos de consulta
+é texto simples. Após vitória ou abandono, consultas e heartbeats periódicos param; comandos de consulta
 e saída continuam disponíveis. A saída do cliente encerra o laço de atualização.
 
 ## Regras e turnos
@@ -315,7 +362,7 @@ Seleção de aceitação e integração:
 mvn -Paceitacao clean verify
 ```
 
-A suíte completa possui **232 casos**; o perfil seleciona **45 desses casos**.
+A suíte completa possui **264 casos**; o perfil seleciona **75 desses casos**.
 Incluem modelos, regras, BFS, concorrência, cópias serializadas, sintaxe de
 barreiras, prévia/confirmar/cancelar, partidas completas, reconexão e quatro JVMs
 clientes reais. O perfil reutiliza testes existentes e os três roteiros de
@@ -324,6 +371,10 @@ clientes reais. O perfil reutiliza testes existentes e os três roteiros de
 Os testes rodam pelo Surefire na fase `test`; `verify` também passa pelo
 empacotamento. Os relatórios ficam em `target/surefire-reports/`. O segundo
 comando com `clean` substitui os relatórios da execução anterior.
+
+Os testes novos simulam os limites de 10 e 180 segundos por relógio monotônico
+controlado, sem aguardar três minutos. Incluem dois ausentes, reconexões concorrentes,
+novos DTOs por RMI real, heartbeat com digitação pendente e encerramento do monitor.
 
 Há timeouts JUnit e RMI, espera por eventos com limite e limpeza de serviços,
 registros e processos. Os testes não exigem que o servidor de demonstração
@@ -353,8 +404,9 @@ os certificados confiáveis daquele ambiente; não foi alterada a instalação g
 
 - Uma única partida em memória, sem persistência, recuperação de token perdido,
   substituição de participantes, reinício pelo cliente ou tolerância a falha do servidor.
-- Sessões não expiram e sair não libera a vaga. Quem conhece um token pode usar
-  aquela sessão; não há TLS configurado nem autenticação adicional.
+- Sair não libera a vaga: há 180 segundos para reconectar após a detecção.
+  Expirado qualquer prazo, termina a partida inteira sem vencedor. Quem conhece
+  um token pode usar aquela sessão; não há TLS configurado nem autenticação adicional.
 - Atualização por polling, com atraso aproximado de um segundo; não há envio
   instantâneo de eventos, ordenação por versão ou repetição idempotente de ações.
 - O nome digitado não é distribuído aos demais jogadores; os peões usam os IDs.
