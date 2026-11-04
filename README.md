@@ -4,7 +4,7 @@ Projeto universitário de Sistemas Distribuídos. O objetivo final é um Quorido
 para quatro jogadores, com um processo servidor e quatro processos clientes
 em localhost, usando Java RMI e interface de terminal.
 
-## Etapa atual: 2 — motor de regras
+## Etapa atual: 4 — clientes de terminal
 
 Implementado:
 
@@ -16,8 +16,13 @@ Implementado:
 - Identificação do vencedor e rejeição de ações após o término.
 - Estados imutáveis e ações rejeitadas sem efeitos sobre a partida.
 - Testes dos modelos, das regras e do controle da partida.
+- Serviço RMI com uma única partida autoritativa e acesso sincronizado.
+- Registro de quatro jogadores, tokens de sessão e reconexão.
+- Servidor executável em localhost e testes de integração com RMI real.
+- Clientes CLI independentes, tabuleiro ASCII, comandos e reconexão por token.
+- Consultas periódicas e testes automatizados com quatro JVMs clientes simultâneas.
 
-Não há ainda aplicação executável, servidor RMI, clientes ou interface CLI.
+A etapa final ainda não foi iniciada.
 
 ## Requisitos e testes
 
@@ -46,26 +51,241 @@ mvn "-Djavax.net.ssl.trustStore=.m2/cacerts" clean test
 Esse arquivo é local, ignorado pelo Git e não é necessário em ambientes sem esse
 problema de certificado. Nenhuma instalação global foi alterada.
 
-Na Etapa 2, `mvn clean test` executou **118 testes**, todos aprovados: 18 testes
-da etapa anterior e 100 novos casos. O teste anterior que exige o turno inicial
-do jogador 1 usa agora uma partida controlada, pois partidas comuns sorteiam o início.
+Na Etapa 4, `mvn clean test` executou **197 testes**, sem falhas, erros ou testes
+ignorados. Os 142 testes anteriores foram preservados sem alterações nesta etapa;
+foram acrescentados 55 casos de interpretação, desenho, apresentação e integração CLI.
 
 ## Organização
 
 ```text
 src/main/java/br/edu/quoridor/
-  modelo/    Posicao, Jogador, Objetivo, Orientacao, Barreira, EstadoJogo e ResultadoAcao
+  modelo/    modelos do jogo, ResultadoAcao, Registro e EstadoServico
   jogo/      Partida e Regras
-  rmi/       reservado para JogoRemoto e ServicoJogo
-  servidor/  reservado para Servidor
-  cliente/   reservado para Cliente e TabuleiroCLI
+  rmi/       JogoRemoto e ServicoJogo
+  servidor/  Servidor
+  cliente/   Cliente, TabuleiroCLI e auxiliares ComandoCLI e TerminalCLI
 src/test/java/br/edu/quoridor/
   modelo/    testes dos modelos
   jogo/      testes de movimentos, barreiras, BFS, turnos e vitória
+  rmi/       testes do serviço, concorrência e integração real
+  cliente/   testes dos comandos, tabuleiro, terminal e clientes em processos reais
 ```
 
-Os pacotes reservados contêm somente `package-info.java`. `Registro` será
-acrescentado na etapa de comunicação, quando sua funcionalidade for necessária.
+O motor de regras e o serviço RMI foram reutilizados sem mudanças na Etapa 4.
+
+## Iniciar e encerrar o servidor
+
+Na raiz do projeto:
+
+```sh
+mvn clean package
+java -cp target/classes br.edu.quoridor.servidor.Servidor
+```
+
+O servidor anuncia `rmi://127.0.0.1:1099/Quoridor` e permanece aguardando jogadores.
+Para encerrá-lo, pressione **Ctrl+C** no mesmo terminal. Não é preciso iniciar
+`rmiregistry` separadamente. O comando de execução usa somente o JDK, sem
+dependências adicionais de produção nem mudanças no `pom.xml`.
+
+Se for necessário baixar novos plugins nesta máquina e aparecer erro de
+certificado, use o armazenamento local descrito acima:
+
+```sh
+mvn "-Djavax.net.ssl.trustStore=.m2/cacerts" clean package
+```
+
+`LocateRegistry.createRegistry(1099)` cria o registro que associa nomes a
+referências remotas. Se a porta estiver ocupada, o servidor tenta usar um registro
+RMI existente em localhost e verifica sua disponibilidade com `list()`.
+Se não houver registro válido, informa a falha. A publicação usa `bind("Quoridor", ...)`:
+uma segunda instância informa o conflito e não substitui o serviço existente.
+
+O serviço é exportado com `UnicastRemoteObject.exportObject(this, 0)`.
+O RMI escolhe uma porta livre para suas chamadas; **1099 é a porta de descoberta
+do registro**, não a única porta usada pelo RMI. As referências anunciadas pelo
+servidor usam `127.0.0.1`. Toda comunicação é feita pelas APIs RMI.
+
+Ao encerrar normalmente com Ctrl+C, um gancho remove a publicação e libera
+o serviço exportado. O registro é encerrado somente se tiver sido criado por
+este processo; um registro externo é preservado. Os registros dos jogadores e
+a partida ficam somente em memória e são perdidos ao encerrar o servidor.
+
+## Iniciar os quatro clientes
+
+Mantenha o servidor em um terminal do VS Code. Abra **outros quatro terminais
+PowerShell**, todos na raiz do projeto, e execute em cada um:
+
+```sh
+java -cp target/classes br.edu.quoridor.cliente.Cliente
+```
+
+Cada execução é um processo Java independente. Por padrão, o cliente conecta ao
+registro em `127.0.0.1:1099` e faz `lookup("Quoridor")`. Opcionalmente, pode-se informar
+host e porta, sem alterar a configuração padrão do servidor:
+
+```sh
+java -cp target/classes br.edu.quoridor.cliente.Cliente 127.0.0.1 1099
+```
+
+Informe seu nome e pressione Enter no campo de token para registrar um novo
+jogador. O nome é um apelido local, pois a API do servidor identifica jogadores
+por ID e token. O cliente informa o ID atribuído pelo servidor e mostra apenas
+o próprio token. Guarde-o; o comando `sessao` permite consultá-lo novamente.
+
+Até quatro registros, o tabuleiro informa quantos participantes estão presentes.
+Quando os quatro se registram, o jogo libera as ações no turno sorteado pelo
+servidor. Um quinto registro é recusado. Cada cliente mostra seu ID, o turno,
+os estoques e se é sua vez. A vitória é anunciada nos quatro terminais.
+
+Para sair, digite `sair`, pressione Ctrl+C ou encerre a entrada. A vaga não é
+liberada: para retornar, execute o cliente novamente e informe seu token quando
+solicitado. Reconectar preserva o ID e não consome uma nova vaga. Token inválido
+é recusado, sem registrar outro jogador automaticamente.
+
+## Comandos e coordenadas da CLI
+
+| Comando | Função |
+| --- | --- |
+| `ajuda` | Mostra os comandos e a convenção das âncoras. |
+| `tabuleiro` | Consulta e mostra o estado atual. |
+| `mover LINHA COLUNA` | Solicita movimento para uma casa, usando números de **1 a 9**. |
+| `barreira H LINHA COLUNA` | Solicita barreira horizontal, com âncora de **1 a 8**. |
+| `barreira V LINHA COLUNA` | Solicita barreira vertical, com âncora de **1 a 8**. |
+| `sessao` | Mostra somente o próprio token para reconexão. |
+| `sair` | Encerra o cliente. |
+
+Exemplos:
+
+```text
+mover 2 5
+barreira H 3 4
+barreira V 6 2
+```
+
+Na CLI, a âncora **(L,C)** usa coordenadas a partir de 1:
+
+- **H:** separa as linhas `L` e `L+1`, nas colunas `C` e `C+1`.
+- **V:** separa as colunas `C` e `C+1`, nas linhas `L` e `L+1`.
+
+Assim, `barreira H 3 4` fica abaixo das casas (3,4) e (3,5).
+`barreira V 3 4` fica à direita das casas (3,4) e (4,4).
+O desenho usa `=` para barreiras horizontais e `|` para verticais, estendendo
+cada barreira pelos dois segmentos. Peões são `1`, `2`, `3`, `4`; casas vazias são `.`.
+
+O cliente subtrai 1 das coordenadas antes de enviar as ações. As seções sobre
+modelos e regras abaixo continuam usando os **índices internos a partir de 0**.
+Comandos não diferenciam maiúsculas de minúsculas. O cliente valida somente a
+sintaxe e os intervalos; turno, estoque, saltos, barreiras, caminhos e vitória
+continuam sendo decididos exclusivamente pelo servidor. As mensagens de recusa
+do serviço são exibidas em português.
+
+## Atualizações e leitura do terminal
+
+O cliente faz uma consulta aproximadamente a cada **um segundo**, usando somente
+RMI, sem callbacks. Um laço único processa comandos, realiza as chamadas e escreve
+na tela. Uma thread daemon lê linhas de entrada e as coloca em uma fila. O laço
+espera nessa fila apenas até a próxima consulta; assim, a atualização não depende
+de o usuário pressionar Enter. Não há consultas simultâneas ou tarefas periódicas
+acumuladas dentro do mesmo cliente.
+
+Depois de cada consulta, compara-se o conteúdo visual do novo snapshot com o
+anterior. O tabuleiro só é redesenhado quando há mudanças ou uma solicitação
+explícita do usuário. Ao terminar a partida, as consultas periódicas cessam,
+mas os comandos `ajuda`, `tabuleiro`, `sessao` e `sair` continuam disponíveis.
+
+No PowerShell interativo, use um terminal com pelo menos **80 colunas e 24 linhas**.
+O painel ocupa as primeiras 23 linhas; a linha 24 é reservada ao comando. As
+sequências ANSI salvam e restauram o cursor durante atualizações do painel,
+preservando a linha em edição. Elas são usadas somente quando há console real.
+Com entrada ou saída redirecionada, o cliente usa texto simples, adequado a pipes
+e aos testes automatizados. Não é usada biblioteca externa de terminal.
+
+Falhas de comunicação encerram o laço com uma mensagem e instrução de reconexão;
+ações não são reenviadas automaticamente. No RMI do JDK, o cliente configura
+limites de cinco segundos para resposta e handshake, respeitando valores
+explicitamente fornecidos com `-Dsun.rmi.transport.tcp.responseTimeout` e
+`-Dsun.rmi.transport.tcp.handshakeTimeout`. Ao sair, a leitura é interrompida;
+como é daemon, uma leitura nativa pendente não impede o encerramento da JVM.
+Não há executor de atualização que permaneça ativo depois da saída.
+
+## Testes dos clientes
+
+- `ComandoCLITest`: comandos, todas as conversões de coordenadas e entradas inválidas.
+- `TabuleiroCLITest`: peões, eixos, barreiras de dois segmentos, limites, estoques e vencedor.
+- `TerminalCLITest`: supressão de redesenhos e preservação do cursor do prompt.
+- `ClienteIntegracaoTest`: comandos enviados por RMI, erros, reconexão, snapshots,
+  saída por EOF e uma partida completa conduzida por quatro instâncias de cliente.
+- `ClientesProcessosTest`: quatro JVMs executando o `main` real, atualização sem
+  novas entradas, movimento, barreira, recusa do quinto processo, reconexão e
+  encerramento após perda da conexão enquanto a leitura está pendente.
+
+Os testes de processos usam um registro RMI em uma porta disponível diferente
+de 1099 e controlam os clientes pelos pipes de entrada e saída. Esperam eventos
+observáveis com limite de tempo, sem exigir temporizações exatas. Processos e
+recursos RMI criados pelos testes são liberados ao terminar.
+
+## Interface remota e sessões
+
+`JogoRemoto` estende `Remote`; todos os métodos declaram `RemoteException`.
+Os parâmetros de ações usam coordenadas inteiras, para que o servidor possa
+recusar coordenadas inválidas com `ResultadoAcao`.
+
+| Método | Retorno e comportamento |
+| --- | --- |
+| `registrar()` | `Registro` com sucesso, ID de 1 a 4, token e mensagem; recusa o quinto registro. |
+| `reconectar(token)` | Recupera a mesma sessão, sem ocupar nova vaga nem alterar o jogo. |
+| `consultarEstado()` | `EstadoServico`, contendo `jogo()` e `jogadoresRegistrados()`. |
+| `mover(token, linha, coluna)` | `ResultadoAcao` da movimentação do jogador associado ao token. |
+| `colocarBarreira(token, linha, coluna, orientacao)` | `ResultadoAcao` da tentativa de colocar uma barreira. |
+
+Em `Registro`, uma recusa tem `sucesso() == false`, `jogadorId() == 0` e
+`token() == null`. Em ações, erros de sessão, espera por participantes e jogadas
+inválidas retornam `ResultadoAcao(false, mensagem)`. `RemoteException` indica
+falha na comunicação, não uma jogada recusada.
+
+O servidor atribui os IDs pela ordem dos registros e gera tokens com
+`UUID.randomUUID()`, independentemente da origem de aleatoriedade dos turnos.
+As chamadas de ação não possuem parâmetro de ID: o serviço o encontra no mapa
+privado de sessões. Tokens inválidos são recusados e nenhuma jogada é aceita
+antes do quarto registro. A validação de turno e das regras é delegada a `Partida`.
+
+A reconexão exige guardar e reenviar o token original. Ela funciona inclusive
+com as quatro vagas ocupadas e preserva a identidade durante a vida desse
+servidor. Não há recuperação de token perdido nem persistência entre reinícios.
+
+`EstadoServico` reúne a quantidade de participantes e um `EstadoJogo`, que já
+contém posições, objetivos, estoques, barreiras, turno e vencedor. Nenhum dos dois
+contém tokens. Os DTOs e os modelos retornados implementam `Serializable`;
+os enums são serializáveis pelo próprio Java. O RMI entrega cópias independentes
+ao cliente, mantendo as listas e seus elementos imutáveis.
+
+## Proteção do estado compartilhado
+
+`ServicoJogo` mantém uma `Partida` privada criada por ele, sem expô-la nem aceitar
+uma instância externa mutável. Todos os métodos de registro, reconexão, consulta
+e ação são `synchronized` no mesmo objeto. Assim, autenticar, verificar os quatro
+registros e executar uma jogada ocorrem na mesma seção crítica. O monitor também
+protege o mapa de sessões, a contagem de jogadores e as consultas.
+
+O motor de regras da Etapa 2 permanece inalterado. Ele só substitui seu estado
+depois de validar a ação inteira. O serviço consulta o estado e a contagem de
+registros sob o mesmo bloqueio, formando um retrato consistente. Depois de
+retornado, esse retrato não muda, mesmo que outra chamada aplique uma jogada.
+
+## Testes do serviço RMI
+
+- `ServicoJogoTest`: registro, limite de vagas, tokens, espera por participantes,
+  turno, ações válidas e inválidas, reconexão, snapshots e término da partida.
+- `ConcorrenciaRmiTest`: registros e ações simultâneas, com consultas que verificam
+  a consistência entre estoque, barreiras e turno.
+- `IntegracaoRmiTest`: quatro testes com registro RMI real, `lookup` através de
+  um stub, DTOs serializados e chamadas remotas, incluindo concorrência e encerramento.
+- `ApoioRmi`: auxiliar de testes para controlar o turno inicial e iniciar chamadas
+  concorrentes com `CountDownLatch`, sem depender de pausas arbitrárias.
+
+Os testes usam a porta **0**, deixando o RMI escolher portas temporárias sem
+disputar a 1099 do servidor de demonstração. Todos os serviços e registros
+criados pelos testes são desexportados ao terminar.
 
 ## Coordenadas e configuração inicial
 

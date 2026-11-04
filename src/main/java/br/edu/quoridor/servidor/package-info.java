@@ -1,2 +1,2 @@
-/** Pacote reservado para a inicialização do servidor nas próximas etapas. */
+/** Inicialização do registro local e publicação do servidor Quoridor. */
 package br.edu.quoridor.servidor;

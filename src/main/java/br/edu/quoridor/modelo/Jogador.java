@@ -1,9 +1,14 @@
 package br.edu.quoridor.modelo;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
 
 /** Dados imutáveis de um jogador em um instante da partida. */
-public final class Jogador {
+public final class Jogador implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     public static final int BARREIRAS_INICIAIS = 5;
 
     private final int id;

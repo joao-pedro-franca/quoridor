@@ -1,10 +1,15 @@
 package br.edu.quoridor.modelo;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 import java.util.HashSet;
 
 /** Retrato imutável de uma partida; listas e jogadores não podem ser alterados. */
-public final class EstadoJogo {
+public final class EstadoJogo implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     private final List<Jogador> jogadores;
     private final List<Barreira> barreiras;
     private final int jogadorDaVez;

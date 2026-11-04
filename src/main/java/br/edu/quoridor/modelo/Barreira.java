@@ -1,5 +1,7 @@
 package br.edu.quoridor.modelo;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
 
 /**
@@ -8,7 +10,10 @@ import java.util.Objects;
  * A vertical separa as colunas c e c+1 nas linhas l e l+1.
  * Nesta etapa, somente as coordenadas e a orientação são validadas.
  */
-public record Barreira(int linha, int coluna, Orientacao orientacao) {
+public record Barreira(int linha, int coluna, Orientacao orientacao) implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     public Barreira {
         if (linha < 0 || linha >= Posicao.TAMANHO_TABULEIRO - 1
                 || coluna < 0 || coluna >= Posicao.TAMANHO_TABULEIRO - 1) {
