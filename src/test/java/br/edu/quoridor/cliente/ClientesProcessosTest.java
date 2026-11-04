@@ -122,7 +122,12 @@ class ClientesProcessosTest {
     private ProcessoCliente novoCliente(String nome, String token) throws IOException {
         String executavel = System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java";
         Path java = Path.of(System.getProperty("java.home"), "bin", executavel);
-        Process processo = new ProcessBuilder(java.toString(), "-cp", Path.of("target/classes").toAbsolutePath().toString(),
+        // Os subprocessos são dirigidos por pipes, não por um terminal de verdade.
+        // Em execuções iniciadas pelo VS Code, TERM_PROGRAM pode ser herdado e
+        // ativar o painel ANSI, quebrando a leitura por linhas neste teste.
+        // Forçar modo texto somente no teste mantém o painel interativo do jogo.
+        Process processo = new ProcessBuilder(java.toString(), "-Dquoridor.terminal=texto",
+                "-cp", Path.of("target/classes").toAbsolutePath().toString(),
                 Cliente.class.getName(), "127.0.0.1", Integer.toString(porta)).redirectErrorStream(true).start();
         ProcessoCliente cliente = new ProcessoCliente(processo);
         processos.add(cliente);
