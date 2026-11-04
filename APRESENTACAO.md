@@ -151,9 +151,10 @@ mvn clean verify
 mvn -Paceitacao clean verify
 ```
 
-Na verificação final desta entrega, o primeiro comando aprovou **264 testes** e
-o segundo, **75**, sem falhas ou erros. Na apresentação, mostre os resultados
-reais que aparecerem; esses números são casos, não número de classes.
+Na última verificação completa informada, o primeiro comando aprovou
+**279 testes**, sem falhas ou erros. O perfil de aceitação executa parte dessa
+suíte; na apresentação, mostre a quantidade realmente exibida em cada comando.
+Os números representam casos de teste, não quantidade de classes.
 
 Explique que o perfil reutiliza testes de integração, concorrência e processos.
 Mostre `AceitacaoJogoTest`: há uma partida determinística completa com barreiras,

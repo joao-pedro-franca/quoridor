@@ -8,8 +8,8 @@ Na raiz do projeto, com JDK 21 e Maven:
 mvn clean verify
 ```
 
-Esse é o comando recomendado antes de apresentar ou entregar: executa **264
-testes** e gera o JAR. Os testes rodam na fase `test`, pelo Surefire já existente;
+Esse é o comando recomendado antes de apresentar ou entregar: executa a suíte completa (com **279 casos** na última validação informada)
+e gera o JAR. Os testes rodam na fase `test`, pelo Surefire já existente;
 não foi necessário adicionar bibliotecas ou outro executor de testes.
 
 Para executar apenas a seleção de aceitação:
@@ -18,9 +18,11 @@ Para executar apenas a seleção de aceitação:
 mvn -Paceitacao clean verify
 ```
 
-O perfil seleciona **75 testes** de `AceitacaoJogoTest`, `ClienteIntegracaoTest`,
-`ClientesProcessosTest`, `ServicoJogoTest`, `IntegracaoRmiTest` e
-`ConcorrenciaRmiTest`, `HeartbeatTest` e `ConexoesCLITest`. Ele reaproveita a cobertura existente. Não substitui a
+O perfil seleciona os testes de `AceitacaoJogoTest`, `ClienteIntegracaoTest`,
+`ClientesProcessosTest`, `ServicoJogoTest`, `IntegracaoRmiTest`,
+`ConcorrenciaRmiTest`, `HeartbeatTest` e `ConexoesCLITest`.
+Ele reaproveita a cobertura existente; consulte o resultado do Maven para o
+número exato de casos executados pelo perfil. Não substitui a
 verificação completa das regras, comandos e modelos do comando sem perfil.
 
 Os relatórios ficam em `target/surefire-reports/`. Cada execução com `clean`
@@ -141,8 +143,10 @@ Isso é separado da validação funcional das regras e das chamadas remotas.
 
 Os 232 testes anteriores foram preservados. Foram acrescentados 32 casos:
 21 em `HeartbeatTest`, oito em `ConexoesCLITest`, dois em `EstadoJogoTest` e
-um em `IntegracaoRmiTest`. O perfil de aceitação inclui os dois novos conjuntos
-de conexão e a chamada RMI real, totalizando 75 casos. A suíte completa tem 264.
+um em `IntegracaoRmiTest`. O perfil de aceitação passou a incluir os dois novos conjuntos
+de conexão e a chamada RMI real. Naquela etapa, a suíte completa chegou a 264
+casos; após os aprimoramentos da interface e dos testes de terminal, a última
+execução completa informada totalizou 279 casos.
 
 Os limites de ausência (10 segundos) e reconexão (180 segundos) são simulados
 por um `LongSupplier` monotônico controlado. O monitor continua automático,

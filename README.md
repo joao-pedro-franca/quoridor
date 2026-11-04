@@ -8,6 +8,10 @@ o servidor exclusivamente por Java RMI.
 O trabalho demonstra chamadas remotas, serialização, identificação de sessões,
 controle de concorrência e manutenção de um estado autoritativo compartilhado.
 
+A configuração Maven atual da branch `main` utiliza a versão **2.0.0**.
+As tags Git `v1.0.0` e `v2.0.0` preservam os commits publicados originalmente;
+alterações posteriores no README ou no `pom.xml` não reescrevem essas tags.
+
 ## Tecnologias e requisitos
 
 - **JDK 21**, com `java` e `javac` disponíveis no `PATH`.
@@ -40,7 +44,7 @@ mvn clean package
 ```
 
 O comando executa os testes e gera `target/classes` e
-`target/quoridor-rmi-1.0-SNAPSHOT.jar`. Os comandos abaixo usam `target/classes`;
+`target/quoridor-rmi-2.0.0.jar`. Os comandos abaixo usam `target/classes`;
 não é necessário configurar um classpath de dependências externas.
 
 ### Terminal 1: servidor
@@ -381,7 +385,9 @@ Seleção de aceitação e integração:
 mvn -Paceitacao clean verify
 ```
 
-A suíte completa possui **264 casos**; o perfil seleciona **75 desses casos**.
+Na última validação completa informada, a suíte aprovou **279 casos**. O perfil
+`aceitacao` executa um subconjunto desses testes; confira o total exato no
+relatório do Maven após cada execução.
 Incluem modelos, regras, BFS, concorrência, cópias serializadas, sintaxe de
 barreiras, prévia/confirmar/cancelar, partidas completas, reconexão e quatro JVMs
 clientes reais. O perfil reutiliza testes existentes e os três roteiros de
