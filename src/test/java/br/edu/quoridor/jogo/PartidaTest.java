@@ -41,7 +41,7 @@ class PartidaTest {
 
     @Test
     void iniciaSemBarreirasNoTabuleiroENoTurnoDoJogadorUm() {
-        EstadoJogo estado = new Partida().getEstado();
+        EstadoJogo estado = new Partida(new EstadoJogo()).getEstado();
         assertTrue(estado.getBarreiras().isEmpty());
         assertEquals(1, estado.getJogadorDaVez());
     }
