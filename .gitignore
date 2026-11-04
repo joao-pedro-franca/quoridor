@@ -1,0 +1,20 @@
+# Java
+*.class
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+.m2/
+*.log
+
+# VS Code
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
