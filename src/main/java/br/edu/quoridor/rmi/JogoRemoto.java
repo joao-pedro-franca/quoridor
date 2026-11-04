@@ -15,6 +15,10 @@ public interface JogoRemoto extends Remote {
     /** Recupera o mesmo registro sem ocupar outra vaga; exige o token original. */
     Registro reconectar(String token) throws RemoteException;
 
+    ResultadoAcao heartbeat(String token) throws RemoteException;
+
+    ResultadoAcao desconectar(String token) throws RemoteException;
+
     EstadoServico consultarEstado() throws RemoteException;
 
     ResultadoAcao mover(String token, int linha, int coluna) throws RemoteException;

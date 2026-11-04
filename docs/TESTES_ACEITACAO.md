@@ -8,7 +8,7 @@ Na raiz do projeto, com JDK 21 e Maven:
 mvn clean verify
 ```
 
-Esse é o comando recomendado antes de apresentar ou entregar: executa **232
+Esse é o comando recomendado antes de apresentar ou entregar: executa **264
 testes** e gera o JAR. Os testes rodam na fase `test`, pelo Surefire já existente;
 não foi necessário adicionar bibliotecas ou outro executor de testes.
 
@@ -18,9 +18,9 @@ Para executar apenas a seleção de aceitação:
 mvn -Paceitacao clean verify
 ```
 
-O perfil seleciona **45 testes** de `AceitacaoJogoTest`, `ClienteIntegracaoTest`,
+O perfil seleciona **75 testes** de `AceitacaoJogoTest`, `ClienteIntegracaoTest`,
 `ClientesProcessosTest`, `ServicoJogoTest`, `IntegracaoRmiTest` e
-`ConcorrenciaRmiTest`. Ele reaproveita a cobertura existente. Não substitui a
+`ConcorrenciaRmiTest`, `HeartbeatTest` e `ConexoesCLITest`. Ele reaproveita a cobertura existente. Não substitui a
 verificação completa das regras, comandos e modelos do comando sem perfil.
 
 Os relatórios ficam em `target/surefire-reports/`. Cada execução com `clean`
@@ -136,3 +136,17 @@ carga prolongado. Também não incluem uma partida inteira com o `main` do servi
 em uma quinta JVM: o serviço e o registro RMI reais são hospedados pela JVM de
 testes, enquanto os quatro processos clientes existentes continuam independentes.
 Isso é separado da validação funcional das regras e das chamadas remotas.
+
+## Ampliação: heartbeat e prazo de reconexão
+
+Os 232 testes anteriores foram preservados. Foram acrescentados 32 casos:
+21 em `HeartbeatTest`, oito em `ConexoesCLITest`, dois em `EstadoJogoTest` e
+um em `IntegracaoRmiTest`. O perfil de aceitação inclui os dois novos conjuntos
+de conexão e a chamada RMI real, totalizando 75 casos. A suíte completa tem 264.
+
+Os limites de ausência (10 segundos) e reconexão (180 segundos) são simulados
+por um `LongSupplier` monotônico controlado. O monitor continua automático,
+encerra mesmo sem consultas e é desligado na limpeza. Há testes de operações
+concorrentes junto ao limite, múltiplos ausentes, preservação de jogo e turno,
+abandono sem vencedor e prévia durante a pausa. O teste de digitação espera
+sinais de dois heartbeats reais, sem depender de uma pausa exata.

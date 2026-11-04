@@ -171,6 +171,8 @@ class ClienteIntegracaoTest {
 
     private Cliente cliente(StringWriter saida, String entrada) {
         JogoRemoto contando = new JogoRemoto() {
+            public ResultadoAcao heartbeat(String token) throws RemoteException { return remoto.heartbeat(token); }
+            public ResultadoAcao desconectar(String token) throws RemoteException { return remoto.desconectar(token); }
             public Registro registrar() throws RemoteException { return remoto.registrar(); }
             public Registro reconectar(String token) throws RemoteException { return remoto.reconectar(token); }
             public EstadoServico consultarEstado() throws RemoteException { return remoto.consultarEstado(); }

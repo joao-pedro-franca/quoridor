@@ -1,6 +1,6 @@
 # Quoridor RMI — roteiro de apresentação
 
-Roteiro sugerido de **6 a 8 minutos**, sem precisar jogar uma partida inteira.
+Roteiro sugerido de **8 a 10 minutos**, sem precisar jogar uma partida inteira.
 Os exemplos abaixo pressupõem uma partida recém-iniciada.
 
 ## Preparação
@@ -108,7 +108,41 @@ A verificação e a alteração são atômicas. `Partida` só publica um novo es
 após validar a jogada. As listas são defensivas e os DTOs imutáveis; uma cópia
 recebida por RMI não permite alterar o servidor.”
 
-## 6. Testes e encerramento — 1 a 2 minutos
+## 6. Desconexão, pausa e retorno — 2 minutos
+
+Mantenha os mesmos cinco terminais (servidor e quatro clientes). No cliente 2,
+use `sessao` e guarde o token. Digite `sair`: o servidor recebe `desconectar(token)`
+imediatamente. Nos demais terminais, mostre `PARTIDA PAUSADA`, o jogador ausente,
+a contagem a partir de `03:00` e o turno preservado. Uma tentativa de movimento
+ou barreira durante a pausa é recusada.
+
+No mesmo terminal que saiu, execute novamente:
+
+```sh
+java -cp target/classes br.edu.quoridor.cliente.Cliente
+```
+
+Informe um nome e o **token original** (não deixe vazio). Mostre o retorno do
+mesmo ID, posições e estoque, e a mensagem de retomada. A vaga não foi duplicada.
+
+Para demonstrar falha inesperada, encerre esse cliente com Ctrl+C. Sem receber
+heartbeats, o servidor detecta a ausência após dez segundos e pausa novamente.
+Explique: “O cliente envia heartbeat a cada três segundos, mesmo parado ou
+escrevendo um comando. O servidor verifica todos com um único monitor periódico.
+Os três minutos usam relógio monotônico e são controlados pelo servidor.”
+
+Reconecte dentro do prazo para continuar. Para mostrar abandono de verdade,
+mantenha o cliente ausente até o prazo de 180 segundos expirar: todos verão
+`PARTIDA ENCERRADA`, sem vencedor, e o ID responsável. Retornar depois disso
+não reinicia o jogo. Se não houver tempo para esperar na apresentação, mostre
+`HeartbeatTest`: o relógio controlado permite verificar essa expiração em milissegundos,
+sem comandos de administrador e sem mudar o tempo de produção.
+
+Se dois jogadores saírem, cada um terá seu próprio prazo; voltar apenas um não
+retoma. Vence a primeira expiração, encerrando a partida inteira sem vencedor.
+Não faça essa demonstração após uma vitória: nesse caso já não há timeout novo.
+
+## 7. Testes e encerramento — 1 a 2 minutos
 
 Encerre os quatro clientes com `sair` e o servidor com **Ctrl+C**. Depois execute:
 
@@ -117,8 +151,8 @@ mvn clean verify
 mvn -Paceitacao clean verify
 ```
 
-Na verificação final desta entrega, o primeiro comando aprovou **232 testes** e
-o segundo, **45**, sem falhas ou erros. Na apresentação, mostre os resultados
+Na verificação final desta entrega, o primeiro comando aprovou **264 testes** e
+o segundo, **75**, sem falhas ou erros. Na apresentação, mostre os resultados
 reais que aparecerem; esses números são casos, não número de classes.
 
 Explique que o perfil reutiliza testes de integração, concorrência e processos.
@@ -144,9 +178,13 @@ timeout e encerra os recursos ao terminar. Não são necessárias quatro pessoas
 | Como são tratadas sobreposição e cruzamento? | Horizontais conflitam na mesma linha com âncoras sobrepostas; verticais, na mesma coluna. Orientações diferentes cruzam na mesma âncora. Depois verifica-se BFS. |
 | A prévia garante que a barreira será aceita? | Não. Ela é local, temporária e não reserva posição nem turno. Ao confirmar, o servidor verifica novamente tudo. |
 | E se a resposta de uma ação se perder? | O cliente informa a falha e não repete a ação automaticamente. Não há identificadores de requisição para garantir repetição idempotente. |
-| O que acontece se um jogador sair? | Sua vaga permanece reservada. Pode reconectar com o token enquanto o servidor continuar vivo. Não há substituição automática ou prazo de turno. |
+| O que acontece se um jogador sair? | Sua vaga permanece reservada. A partida pausa e concede 180 segundos após a detecção para reconectar. Não há substituição automática nem prazo para pensar na jogada enquanto conectado. |
 | E se o servidor cair? | A partida e as sessões são perdidas. Não há persistência nem réplica. Reiniciar cria outra partida. |
-| O jogo termina como? | Ao alcançar o lado oposto, `Partida` registra o vencedor e mantém o término; novas ações são recusadas. |
+| O jogo termina como? | Ao alcançar o lado oposto há vencedor. Se um prazo de reconexão expirar, termina por abandono com vencedor nulo e ID responsável. Nos dois casos, novas ações são recusadas. |
+| Heartbeat atrasado reconecta sozinho? | Não. Uma sessão já desconectada precisa de `reconectar(token)` dentro do prazo. Heartbeats não reiniciam o timer. |
+| Quantas threads de monitoramento existem? | Um monitor agendado por serviço, não por jogador. O cliente envia heartbeats no mesmo laço de polling. |
+| O relógio do Windows pode mudar o prazo? | Não. Usamos diferença de `System.nanoTime()`, não data/hora civil. Os testes injetam uma fonte monotônica controlável. |
+| O que ocorre no limite do prazo? | O monitor do serviço serializa a decisão. Antes de 180 segundos, uma reconexão válida pode cancelar o prazo; em 180 segundos ou depois, o abandono já é definitivo. |
 | Os testes provam todos os comportamentos? | Cobrem os cenários documentados. A apresentação visual ANSI, edição de linha e Ctrl+C merecem ensaio manual; não há prova exaustiva nem teste de carga prolongado. |
 
 Detalhes de execução e limitações: [README](README.md).

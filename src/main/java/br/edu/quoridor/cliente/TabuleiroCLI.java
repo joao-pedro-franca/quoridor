@@ -20,8 +20,8 @@ public final class TabuleiroCLI {
         var barreiras = new ArrayList<>(jogo.getBarreiras());
         barreiras.add(proposta);
         var temporario = new EstadoJogo(jogo.getJogadores(), barreiras,
-                jogo.getJogadorDaVez(), jogo.getVencedor());
-        return desenhar(new EstadoServico(temporario, estado.jogadoresRegistrados()), jogadorId, proposta);
+                jogo.getJogadorDaVez(), jogo.getVencedor(), jogo.getSituacao(), jogo.getJogadorAbandono());
+        return desenhar(new EstadoServico(temporario, estado.jogadoresRegistrados(), estado.presencas()), jogadorId, proposta);
     }
 
     private static String desenhar(EstadoServico estado, int jogadorId, Barreira proposta) {
@@ -54,11 +54,34 @@ public final class TabuleiroCLI {
             texto.append(linha % 2 == 0 ? (linha / 2 + 1) + " " : "  ");
             texto.append(grade[linha]).append('\n');
         }
+        if (estado.jogo().isPausada()) {
+            texto.append("PARTIDA PAUSADA | Aguardando reconexão. Turno: ")
+                    .append(estado.jogo().getJogadorDaVez()).append('\n');
+        } else if (estado.jogo().getSituacao() == SituacaoPartida.ENCERRADA_POR_ABANDONO) {
+            texto.append("PARTIDA ENCERRADA | Resultado: sem vencedor\n");
+        } else {
         texto.append("Registrados: ").append(estado.jogadoresRegistrados()).append("/4 | Turno: jogador ")
                 .append(estado.jogo().getJogadorDaVez()).append('\n');
+        }
         texto.append("Barreiras:");
         for (Jogador jogador : estado.jogo().getJogadores()) {
             texto.append("  ").append(jogador.getId()).append('=').append(jogador.getBarreirasDisponiveis());
+        }
+        if (estado.jogo().isPausada()) {
+            texto.append("\nFora: ");
+            for (PresencaJogador presenca : estado.presencas()) {
+                if (!presenca.conectado()) {
+                    long segundos = presenca.segundosRestantes();
+                    texto.append("Jogador ").append(presenca.jogadorId()).append(" (")
+                            .append(String.format("%02d:%02d", segundos / 60, segundos % 60)).append(") ");
+                }
+            }
+            return texto.toString();
+        }
+        if (estado.jogo().getSituacao() == SituacaoPartida.ENCERRADA_POR_ABANDONO) {
+            texto.append("\nMotivo: jogador ").append(estado.jogo().getJogadorAbandono())
+                    .append(" não reconectou dentro de 3 minutos.");
+            return texto.toString();
         }
         if (proposta != null) {
             int linha = proposta.linha() + 1;
