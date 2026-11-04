@@ -73,7 +73,11 @@ public final class Cliente {
             JogoRemoto jogo = (JogoRemoto) LocateRegistry.getRegistry(host, porta).lookup("Quoridor");
             BufferedReader entrada = new BufferedReader(System.console() != null
                     ? System.console().reader() : new InputStreamReader(System.in));
-            new Cliente(jogo, entrada, new PrintWriter(System.out, true), System.console() != null).executar();
+            // Em terminais integrados (como o VS Code), System.console() geralmente é null,
+            // apesar de o terminal aceitar sequências ANSI para redesenho do painel.
+            boolean painelInterativo = TerminalCLI.usarPainel(System.console() != null,
+                    System.getenv(), System.getProperty("quoridor.terminal", "auto"));
+            new Cliente(jogo, entrada, new PrintWriter(System.out, true), painelInterativo).executar();
         } catch (NumberFormatException invalido) {
             System.err.println("Porta inválida. Use um número de 1 a 65535.");
         } catch (IllegalArgumentException invalido) {

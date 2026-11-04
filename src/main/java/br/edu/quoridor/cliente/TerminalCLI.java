@@ -1,6 +1,8 @@
 package br.edu.quoridor.cliente;
 
 import java.io.PrintWriter;
+import java.util.Locale;
+import java.util.Map;
 
 /** Um único escritor atualiza o painel superior e preserva a linha de entrada. */
 final class TerminalCLI {
@@ -12,6 +14,34 @@ final class TerminalCLI {
     TerminalCLI(PrintWriter saida, boolean interativo) {
         this.saida = saida;
         this.interativo = interativo;
+    }
+
+    /**
+     * O VS Code costuma retornar null em System.console(), mesmo com um terminal
+     * interativo. O ambiente do emulador é um indicador melhor para o painel ANSI.
+     * Em execuções redirecionadas, -Dquoridor.terminal=texto desativa os escapes.
+     */
+    static boolean usarPainel(boolean console, Map<String, String> ambiente, String modo) {
+        String escolhido = modo.strip().toLowerCase(Locale.ROOT);
+        return switch (escolhido) {
+            case "painel" -> true;
+            case "texto" -> false;
+            case "auto" -> {
+                if (ambiente.containsKey("CI") || "dumb".equalsIgnoreCase(ambiente.get("TERM"))) {
+                    yield false;
+                }
+                String terminal = ambiente.getOrDefault("TERM_PROGRAM", "");
+                String term = ambiente.getOrDefault("TERM", "").toLowerCase(Locale.ROOT);
+                yield console || "vscode".equalsIgnoreCase(terminal)
+                        || ambiente.containsKey("WT_SESSION")
+                        || ambiente.containsKey("ANSICON")
+                        || "ON".equalsIgnoreCase(ambiente.get("ConEmuANSI"))
+                        || term.startsWith("xterm") || term.startsWith("screen")
+                        || term.startsWith("tmux");
+            }
+            default -> throw new IllegalArgumentException(
+                    "Modo de terminal inválido: use -Dquoridor.terminal=auto, painel ou texto.");
+        };
     }
 
     void mostrar(String conteudo, String mensagem, boolean forcar) {

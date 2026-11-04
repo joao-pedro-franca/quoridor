@@ -279,9 +279,28 @@ coloca numa fila. A espera na fila tem prazo até a próxima consulta ou heartbe
 atualizações mesmo sem pressionar Enter. Comandos podem provocar consultas adicionais.
 
 O conteúdo é comparado ao desenho anterior para evitar redesenhos periódicos
-sem mudanças. No console interativo, o painel usa 23 linhas e o prompt fica na
-linha 24; sequências ANSI salvam/restauram o cursor. Com redirecionamento, a saída
-é texto simples. Após vitória ou abandono, consultas e heartbeats periódicos param; comandos de consulta
+sem mudanças. No terminal integrado do VS Code, o cliente detecta o emulador mesmo
+quando `System.console()` retorna `null`, e atualiza o painel em vez de imprimir
+várias cópias do tabuleiro. O painel usa 23 linhas e o prompt fica na linha 24;
+sequências ANSI salvam/restauram o cursor. Amplie o terminal para pelo menos
+80 colunas e 24 linhas; áreas menores podem provocar rolagem e prejudicar o desenho.
+
+Para desativar sequências ANSI (por exemplo, ao redirecionar a saída para um log),
+execute o cliente com:
+
+```powershell
+java -Dquoridor.terminal=texto -cp target/classes br.edu.quoridor.cliente.Cliente
+```
+
+Para forçar o painel caso a detecção automática do terminal falhe, execute:
+
+```powershell
+java -Dquoridor.terminal=painel -cp target/classes br.edu.quoridor.cliente.Cliente
+```
+
+A opção padrão é `auto`.
+O modo texto é apropriado a logs e testes e registra uma nova cópia do tabuleiro
+cada vez que o estado muda. Após vitória ou abandono, consultas e heartbeats periódicos param; comandos de consulta
 e saída continuam disponíveis. A saída do cliente encerra o laço de atualização.
 
 ## Regras e turnos
