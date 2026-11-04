@@ -23,14 +23,14 @@ record ComandoCLI(Tipo tipo, int linha, int coluna, Orientacao orientacao) {
                 yield new ComandoCLI(Tipo.MOVER, coordenada(partes[1], 9), coordenada(partes[2], 9), null);
             }
             case "barreira" -> {
-                exigirQuantidade(partes, 4, "barreira H|V LINHA COLUNA");
+                exigirQuantidade(partes, 4, "barreira H|V LINHA,LINHA COLUNA,COLUNA (ex.: barreira H 3,4 4,5)");
                 Orientacao orientacao = switch (partes[1]) {
                     case "h" -> Orientacao.HORIZONTAL;
                     case "v" -> Orientacao.VERTICAL;
                     default -> throw new IllegalArgumentException("Orientação inválida. Use H ou V.");
                 };
-                yield new ComandoCLI(Tipo.BARREIRA, coordenada(partes[2], 8),
-                        coordenada(partes[3], 8), orientacao);
+                yield new ComandoCLI(Tipo.BARREIRA, inicioPar(partes[2]),
+                        inicioPar(partes[3]), orientacao);
             }
             default -> throw new IllegalArgumentException("Comando desconhecido. Use ajuda.");
         };
@@ -57,5 +57,17 @@ record ComandoCLI(Tipo tipo, int linha, int coluna, Orientacao orientacao) {
             // Inclui números maiores que o intervalo de int.
         }
         throw new IllegalArgumentException("Coordenadas devem ser inteiros de 1 a " + limite + ".");
+    }
+
+    private static int inicioPar(String texto) {
+        if (!texto.matches("[1-9],[1-9]")) {
+            throw new IllegalArgumentException("Use pares no formato 3,4, com números de 1 a 9.");
+        }
+        int primeiro = coordenada(texto.substring(0, 1), 9);
+        int segundo = coordenada(texto.substring(2), 9);
+        if (segundo != primeiro + 1) {
+            throw new IllegalArgumentException("Cada par deve ser consecutivo e crescente, como 3,4.");
+        }
+        return primeiro;
     }
 }

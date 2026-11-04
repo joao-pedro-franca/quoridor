@@ -3,6 +3,7 @@ package br.edu.quoridor.cliente;
 import br.edu.quoridor.modelo.*;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 
 /** Desenha um snapshot usando ASCII; não decide quais jogadas são permitidas. */
 public final class TabuleiroCLI {
@@ -10,6 +11,20 @@ public final class TabuleiroCLI {
     }
 
     public static String desenhar(EstadoServico estado, int jogadorId) {
+        return desenhar(estado, jogadorId, null);
+    }
+
+    /** Monta um snapshot temporário. A proposta não consome estoque nem altera o turno. */
+    public static String previsualizar(EstadoServico estado, int jogadorId, Barreira proposta) {
+        var jogo = estado.jogo();
+        var barreiras = new ArrayList<>(jogo.getBarreiras());
+        barreiras.add(proposta);
+        var temporario = new EstadoJogo(jogo.getJogadores(), barreiras,
+                jogo.getJogadorDaVez(), jogo.getVencedor());
+        return desenhar(new EstadoServico(temporario, estado.jogadoresRegistrados()), jogadorId, proposta);
+    }
+
+    private static String desenhar(EstadoServico estado, int jogadorId, Barreira proposta) {
         char[][] grade = new char[17][37];
         for (char[] linha : grade) {
             Arrays.fill(linha, ' ');
@@ -22,11 +37,11 @@ public final class TabuleiroCLI {
         for (Barreira barreira : estado.jogo().getBarreiras()) {
             if (barreira.orientacao() == Orientacao.HORIZONTAL) {
                 for (int segmento = 1; segmento <= 7; segmento++) {
-                    grade[2 * barreira.linha() + 1][4 * barreira.coluna() + segmento] = '=';
+                    grade[2 * barreira.linha() + 1][4 * barreira.coluna() + segmento] = barreira.equals(proposta) ? '*' : '=';
                 }
             } else {
                 for (int segmento = 0; segmento <= 2; segmento++) {
-                    grade[2 * barreira.linha() + segmento][4 * barreira.coluna() + 4] = '|';
+                    grade[2 * barreira.linha() + segmento][4 * barreira.coluna() + 4] = barreira.equals(proposta) ? '*' : '|';
                 }
             }
         }
@@ -44,6 +59,14 @@ public final class TabuleiroCLI {
         texto.append("Barreiras:");
         for (Jogador jogador : estado.jogo().getJogadores()) {
             texto.append("  ").append(jogador.getId()).append('=').append(jogador.getBarreirasDisponiveis());
+        }
+        if (proposta != null) {
+            int linha = proposta.linha() + 1;
+            int coluna = proposta.coluna() + 1;
+            texto.append('\n').append(proposta.orientacao() == Orientacao.HORIZONTAL
+                    ? "H: separa linhas " + linha + " e " + (linha + 1) + "; ocupa colunas " + coluna + " e " + (coluna + 1) + "."
+                    : "V: separa colunas " + coluna + " e " + (coluna + 1) + "; ocupa linhas " + linha + " e " + (linha + 1) + ".");
+            return texto.toString();
         }
         texto.append("\nVocê é o jogador ").append(jogadorId).append(". ");
         if (estado.jogo().isFinalizada()) {

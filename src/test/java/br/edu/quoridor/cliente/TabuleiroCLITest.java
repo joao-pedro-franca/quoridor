@@ -76,4 +76,34 @@ class TabuleiroCLITest {
         EstadoJogo jogo = new EstadoJogo(inicial.getJogadores(), List.of(barreira), 1, null);
         return TabuleiroCLI.desenhar(new EstadoServico(jogo, 4), 1).split("\n");
     }
+
+    @ParameterizedTest
+    @CsvSource({"0,0", "2,3", "7,7"})
+    void previaHorizontalDestacaSomentePropostaSemMudarEstado(int linha, int coluna) {
+        EstadoServico estado = new EstadoServico(new EstadoJogo(), 4);
+        String antes = TabuleiroCLI.desenhar(estado, 1);
+        String[] previa = TabuleiroCLI.previsualizar(estado, 1,
+                new Barreira(linha, coluna, Orientacao.HORIZONTAL)).split("\n");
+        assertEquals("*******", previa[2 * linha + 2].substring(4 * coluna + 3, 4 * coluna + 10));
+        assertTrue(String.join("\n", previa).contains("H: separa linhas " + (linha + 1) + " e " + (linha + 2)));
+        assertEquals(antes, TabuleiroCLI.desenhar(estado, 1));
+        assertTrue(estado.jogo().getBarreiras().isEmpty());
+        assertEquals(5, estado.jogo().getJogadores().get(0).getBarreirasDisponiveis());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,0", "2,3", "7,7"})
+    void previaVerticalPreservaBarreiraExistenteEDestacaProposta(int linha, int coluna) {
+        EstadoJogo inicial = new EstadoJogo();
+        EstadoServico estado = new EstadoServico(new EstadoJogo(inicial.getJogadores(),
+                List.of(new Barreira(5, 0, Orientacao.HORIZONTAL)), 1, null), 4);
+        String[] previa = TabuleiroCLI.previsualizar(estado, 1,
+                new Barreira(linha, coluna, Orientacao.VERTICAL)).split("\n");
+        for (int segmento = 0; segmento <= 2; segmento++) {
+            assertEquals('*', previa[2 * linha + segmento + 1].charAt(4 * coluna + 6));
+        }
+        assertTrue(String.join("\n", previa).contains("V: separa colunas " + (coluna + 1) + " e " + (coluna + 2)));
+        assertTrue(String.join("\n", previa).contains("======="));
+        assertEquals(1, estado.jogo().getBarreiras().size());
+    }
 }

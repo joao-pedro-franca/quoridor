@@ -33,7 +33,8 @@ class ComandoCLITest {
         for (String orientacao : new String[]{"H", "V"}) {
             for (int linha = 1; linha <= 8; linha++) {
                 for (int coluna = 1; coluna <= 8; coluna++) {
-                    var comando = ComandoCLI.interpretar("barreira " + orientacao + " " + linha + " " + coluna);
+                    var comando = ComandoCLI.interpretar("barreira " + orientacao + " " + linha + "," + (linha + 1)
+                            + " " + coluna + "," + (coluna + 1));
                     assertEquals(ComandoCLI.Tipo.BARREIRA, comando.tipo());
                     assertEquals(linha - 1, comando.linha());
                     assertEquals(coluna - 1, comando.coluna());
@@ -46,7 +47,7 @@ class ComandoCLITest {
 
     @Test
     void aceitaMaiusculasEspacosETabulacoes() {
-        var comando = ComandoCLI.interpretar("  BaRrEiRa\t v  3   4  ");
+        var comando = ComandoCLI.interpretar("  BaRrEiRa\t v  3,4   4,5  ");
         assertEquals(new ComandoCLI(ComandoCLI.Tipo.BARREIRA, 2, 3, Orientacao.VERTICAL), comando);
     }
 
@@ -61,5 +62,17 @@ class ComandoCLITest {
         IllegalArgumentException erro = assertThrows(IllegalArgumentException.class,
                 () -> ComandoCLI.interpretar(texto));
         assertFalse(erro.getMessage().isBlank());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"barreira H 3,5 4,5", "barreira V 3,4 4,6", "barreira H 4,3 4,5",
+            "barreira V 3,4 5,4", "barreira H 3,3 4,5", "barreira V 3,4 4,4",
+            "barreira H 0,1 4,5", "barreira V 3,4 8,10", "barreira H 9,10 4,5",
+            "barreira V -1,0 4,5", "barreira H a,b 4,5", "barreira V 3,4 4.5",
+            "barreira H 3,4,5 4,5", "barreira V 3,4 4,", "barreira H ,4 4,5",
+            "barreira V 3,4 4,,5", "barreira X 3,4 4,5", "barreira H 3, 4 4,5",
+            "barreira H 3,4 4,5 extra", "barreira H 3 4"})
+    void rejeitaParesInvalidosOuFormatoAntigo(String texto) {
+        assertThrows(IllegalArgumentException.class, () -> ComandoCLI.interpretar(texto));
     }
 }

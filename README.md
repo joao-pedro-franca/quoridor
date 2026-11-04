@@ -33,6 +33,12 @@ Na pasta do projeto, execute:
 mvn clean test
 ```
 
+Para a validação completa, incluindo o empacotamento, use `mvn clean verify`.
+Para repetir somente os cenários de aceitação e integração já existentes junto
+dos novos roteiros, use `mvn -Paceitacao clean verify`.
+O [mapa de cobertura e os roteiros de aceitação](docs/TESTES_ACEITACAO.md)
+explicam o que cada conjunto verifica e quais conferências ainda são manuais.
+
 O Maven baixa os plugins e o JUnit na primeira execução. Os relatórios dos testes
 ficam em `target/surefire-reports/`.
 O arquivo `.mvn/maven.config` mantém o cache de dependências em `.m2/repository`
@@ -51,9 +57,10 @@ mvn "-Djavax.net.ssl.trustStore=.m2/cacerts" clean test
 Esse arquivo é local, ignorado pelo Git e não é necessário em ambientes sem esse
 problema de certificado. Nenhuma instalação global foi alterada.
 
-Na Etapa 4, `mvn clean test` executou **197 testes**, sem falhas, erros ou testes
-ignorados. Os 142 testes anteriores foram preservados sem alterações nesta etapa;
-foram acrescentados 55 casos de interpretação, desenho, apresentação e integração CLI.
+Após a revisão da cobertura, `mvn clean verify` executou **232 testes**, sem
+falhas, erros ou testes ignorados. Os 229 casos existentes foram preservados e
+acrescentados três roteiros de aceitação combinando CLI e RMI. O perfil
+`aceitacao` seleciona 45 testes, reutilizando os testes de integração e processos.
 
 ## Organização
 
@@ -149,8 +156,8 @@ solicitado. Reconectar preserva o ID e não consome uma nova vaga. Token inváli
 | `ajuda` | Mostra os comandos e a convenção das âncoras. |
 | `tabuleiro` | Consulta e mostra o estado atual. |
 | `mover LINHA COLUNA` | Solicita movimento para uma casa, usando números de **1 a 9**. |
-| `barreira H LINHA COLUNA` | Solicita barreira horizontal, com âncora de **1 a 8**. |
-| `barreira V LINHA COLUNA` | Solicita barreira vertical, com âncora de **1 a 8**. |
+| `barreira H L,L+1 C,C+1` | Pré-visualiza uma barreira horizontal entre as linhas do primeiro par. |
+| `barreira V L,L+1 C,C+1` | Pré-visualiza uma barreira vertical entre as colunas do segundo par. |
 | `sessao` | Mostra somente o próprio token para reconexão. |
 | `sair` | Encerra o cliente. |
 
@@ -158,19 +165,31 @@ Exemplos:
 
 ```text
 mover 2 5
-barreira H 3 4
-barreira V 6 2
+barreira h 3,4 4,5
+barreira v 3,4 4,5
 ```
 
-Na CLI, a âncora **(L,C)** usa coordenadas a partir de 1:
+Cada par deve conter dois números consecutivos em ordem crescente, de **1 a 9**,
+sem espaços ao redor da vírgula. O primeiro par indica linhas; o segundo, colunas.
+A âncora interna é calculada subtraindo 1 do primeiro número de cada par:
 
 - **H:** separa as linhas `L` e `L+1`, nas colunas `C` e `C+1`.
 - **V:** separa as colunas `C` e `C+1`, nas linhas `L` e `L+1`.
 
-Assim, `barreira H 3 4` fica abaixo das casas (3,4) e (3,5).
-`barreira V 3 4` fica à direita das casas (3,4) e (4,4).
+Assim, `barreira h 3,4 4,5` separa as linhas 3 e 4 nas colunas 4 e 5.
+`barreira v 3,4 4,5` separa as colunas 4 e 5 nas linhas 3 e 4.
+Ambos usam a âncora interna `(2,3)`, com orientações diferentes.
 O desenho usa `=` para barreiras horizontais e `|` para verticais, estendendo
 cada barreira pelos dois segmentos. Peões são `1`, `2`, `3`, `4`; casas vazias são `.`.
+
+Antes de enviar a ação, o cliente desenha um snapshot temporário com a proposta
+destacada por `*`, informa as linhas e colunas envolvidas e pergunta
+**Confirmar posicionamento? (S/N)**. `S` envia uma única tentativa ao servidor;
+`N` cancela sem enviar jogada, consumir estoque ou avançar turno. Uma resposta
+diferente mantém a pergunta. A atualização periódica preserva a prévia até a
+resposta; `sair` ou o fim da entrada também descartam a proposta.
+Essa prévia é somente visual: a legalidade continua sendo verificada pelo servidor
+após a confirmação. A sintaxe antiga sem pares foi substituída.
 
 O cliente subtrai 1 das coordenadas antes de enviar as ações. As seções sobre
 modelos e regras abaixo continuam usando os **índices internos a partir de 0**.

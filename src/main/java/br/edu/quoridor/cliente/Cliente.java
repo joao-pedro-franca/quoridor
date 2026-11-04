@@ -3,6 +3,7 @@ package br.edu.quoridor.cliente;
 import br.edu.quoridor.modelo.EstadoServico;
 import br.edu.quoridor.modelo.Registro;
 import br.edu.quoridor.modelo.ResultadoAcao;
+import br.edu.quoridor.modelo.Barreira;
 import br.edu.quoridor.rmi.JogoRemoto;
 
 import java.io.BufferedReader;
@@ -22,15 +23,16 @@ public final class Cliente {
             ajuda                       Mostra esta ajuda.
             tabuleiro                   Consulta e mostra o estado atual.
             mover LINHA COLUNA          Casas de 1 a 9.
-            barreira H LINHA COLUNA     Âncoras de 1 a 8.
-            barreira V LINHA COLUNA     Âncoras de 1 a 8.
+            barreira H L,L+1 C,C+1      Pares consecutivos de 1 a 9.
+            barreira V L,L+1 C,C+1      Pares consecutivos de 1 a 9.
             sessao                      Mostra somente o seu token.
             sair                        Encerra este cliente, preservando a vaga.
 
             Exemplo: mover 2 5
-            Exemplo: barreira H 3 4
-            H (L,C): separa linhas L e L+1 nas colunas C e C+1.
-            V (L,C): separa colunas C e C+1 nas linhas L e L+1.
+            Exemplo: barreira H 3,4 4,5
+            H: separa as linhas do primeiro par; ocupa as colunas do segundo.
+            V: separa as colunas do segundo par; ocupa as linhas do primeiro.
+            A proposta aparece como *. Confirme com S ou cancele com N.
             A legalidade de toda jogada é decidida pelo servidor.
             """;
 
@@ -42,6 +44,7 @@ public final class Cliente {
     private EstadoServico estado;
     private String desenho;
     private String mensagem = "";
+    private ComandoCLI barreiraPendente;
 
     Cliente(JogoRemoto jogo, BufferedReader entrada, PrintWriter saida, boolean interativo) {
         this.jogo = jogo;
@@ -170,6 +173,9 @@ public final class Cliente {
     }
 
     boolean executarComando(String texto) throws RemoteException {
+        if (barreiraPendente != null) {
+            return confirmarBarreira(texto);
+        }
         ComandoCLI comando;
         try {
             comando = ComandoCLI.interpretar(texto);
@@ -182,20 +188,46 @@ public final class Cliente {
             case AJUDA -> terminal.mostrar(AJUDA, "Use tabuleiro para voltar ao jogo.", true);
             case SESSAO -> mostrarMensagem("Seu token: " + registro.token());
             case TABULEIRO -> atualizar(true);
-            case MOVER, BARREIRA -> {
-                ResultadoAcao resultado = comando.tipo() == ComandoCLI.Tipo.MOVER
-                        ? jogo.mover(registro.token(), comando.linha(), comando.coluna())
-                        : jogo.colocarBarreira(registro.token(), comando.linha(), comando.coluna(), comando.orientacao());
-                mensagem = (resultado.sucesso() ? "OK: " : "Erro: ") + resultado.mensagem();
+            case MOVER -> mostrarResultado(jogo.mover(registro.token(), comando.linha(), comando.coluna()));
+            case BARREIRA -> {
+                barreiraPendente = comando;
+                mensagem = "Proposta: * | Confirmar posicionamento? (S/N)";
                 atualizar(true);
             }
         }
         return true;
     }
 
+    private boolean confirmarBarreira(String texto) throws RemoteException {
+        String resposta = texto.strip();
+        if (resposta.equalsIgnoreCase("sair")) {
+            barreiraPendente = null;
+            return false;
+        }
+        if (resposta.equalsIgnoreCase("N")) {
+            barreiraPendente = null;
+            mensagem = "Posicionamento cancelado. Nenhuma jogada foi enviada.";
+            atualizar(true);
+        } else if (resposta.equalsIgnoreCase("S")) {
+            ComandoCLI comando = barreiraPendente;
+            barreiraPendente = null;
+            mostrarResultado(jogo.colocarBarreira(registro.token(), comando.linha(), comando.coluna(), comando.orientacao()));
+        } else {
+            mostrarMensagem("Responda S ou N. Confirmar posicionamento? (S/N)");
+        }
+        return true;
+    }
+
+    private void mostrarResultado(ResultadoAcao resultado) throws RemoteException {
+        mensagem = (resultado.sucesso() ? "OK: " : "Erro: ") + resultado.mensagem();
+        atualizar(true);
+    }
+
     void atualizar(boolean forcar) throws RemoteException {
         EstadoServico novo = jogo.consultarEstado();
-        String novoDesenho = TabuleiroCLI.desenhar(novo, registro.jogadorId());
+        String novoDesenho = barreiraPendente == null ? TabuleiroCLI.desenhar(novo, registro.jogadorId())
+                : TabuleiroCLI.previsualizar(novo, registro.jogadorId(), new Barreira(
+                        barreiraPendente.linha(), barreiraPendente.coluna(), barreiraPendente.orientacao()));
         estado = novo;
         if (forcar || !novoDesenho.equals(desenho)) {
             desenho = novoDesenho;

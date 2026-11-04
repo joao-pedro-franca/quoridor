@@ -6,6 +6,8 @@ import br.edu.quoridor.rmi.ServicoJogo;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.BufferedReader;
 import java.io.PrintWriter;
@@ -23,6 +25,7 @@ class ClienteIntegracaoTest {
     private Registry registro;
     private ServicoJogo servico;
     private JogoRemoto remoto;
+    private int colocacoes;
 
     @BeforeEach
     void iniciar() throws Exception {
@@ -83,7 +86,8 @@ class ClienteIntegracaoTest {
         assertTrue(saida.toString().contains("Comando desconhecido"));
         assertTrue(saida.toString().contains("Movimento inválido"));
         assertEquals(new Posicao(0, 4), remoto.consultarEstado().jogo().getJogadores().get(0).getPosicao());
-        cliente.executarComando("barreira H 4 4");
+        cliente.executarComando("barreira H 4,5 4,5");
+        cliente.executarComando("S");
         assertEquals(new Barreira(3, 3, Orientacao.HORIZONTAL), remoto.consultarEstado().jogo().getBarreiras().get(0));
         cliente.executarComando("mover 2 5");
         assertTrue(saida.toString().contains("jogador da vez"));
@@ -134,7 +138,7 @@ class ClienteIntegracaoTest {
         StringWriter saida = new StringWriter();
         cliente(saida, "Aluno\n\najuda\ncomando errado\ntabuleiro\nsair\n").executar();
         assertTrue(saida.toString().contains("Bem-vindo, Aluno"));
-        assertTrue(saida.toString().contains("H (L,C):"));
+        assertTrue(saida.toString().contains("H: separa as linhas"));
         assertTrue(saida.toString().contains("Comando desconhecido"));
         assertTrue(saida.toString().contains("Cliente encerrado"));
     }
@@ -166,6 +170,101 @@ class ClienteIntegracaoTest {
     }
 
     private Cliente cliente(StringWriter saida, String entrada) {
-        return new Cliente(remoto, new BufferedReader(new StringReader(entrada)), new PrintWriter(saida), false);
+        JogoRemoto contando = new JogoRemoto() {
+            public Registro registrar() throws RemoteException { return remoto.registrar(); }
+            public Registro reconectar(String token) throws RemoteException { return remoto.reconectar(token); }
+            public EstadoServico consultarEstado() throws RemoteException { return remoto.consultarEstado(); }
+            public ResultadoAcao mover(String token, int linha, int coluna) throws RemoteException {
+                return remoto.mover(token, linha, coluna);
+            }
+            public ResultadoAcao colocarBarreira(String token, int linha, int coluna, Orientacao orientacao)
+                    throws RemoteException {
+                colocacoes++;
+                return remoto.colocarBarreira(token, linha, coluna, orientacao);
+            }
+        };
+        return new Cliente(contando, new BufferedReader(new StringReader(entrada)), new PrintWriter(saida), false);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Orientacao.class)
+    void previaNaoEnviaJogadaEAConfirmacaoEnviaUmaVez(Orientacao orientacao) throws Exception {
+        StringWriter saida = new StringWriter();
+        Cliente cliente = cliente(saida, "");
+        assertTrue(cliente.iniciarSessao("Aluno", ""));
+        for (int i = 0; i < 3; i++) { remoto.registrar(); }
+        EstadoJogo antes = servico.consultarEstado().jogo();
+        String letra = orientacao == Orientacao.HORIZONTAL ? "h" : "v";
+        cliente.executarComando("barreira " + letra + " 3,4 4,5");
+        assertEquals(0, colocacoes);
+        assertSame(antes, servico.consultarEstado().jogo());
+        assertTrue(saida.toString().contains("Confirmar posicionamento? (S/N)"));
+        assertTrue(saida.toString().contains("*"));
+        cliente.executarComando("s");
+        assertEquals(1, colocacoes);
+        assertEquals(new Barreira(2, 3, orientacao), remoto.consultarEstado().jogo().getBarreiras().get(0));
+        assertEquals(4, remoto.consultarEstado().jogo().getJogadores().get(0).getBarreirasDisponiveis());
+        assertEquals(2, remoto.consultarEstado().jogo().getJogadorDaVez());
+        assertTrue(saida.toString().contains("OK: Barreira colocada"));
+    }
+
+    @Test
+    void cancelarNaoEnviaJogadaNemConsomeEstoqueOuTurno() throws Exception {
+        Cliente cliente = cliente(new StringWriter(), "");
+        assertTrue(cliente.iniciarSessao("Aluno", ""));
+        for (int i = 0; i < 3; i++) { remoto.registrar(); }
+        EstadoJogo antes = servico.consultarEstado().jogo();
+        cliente.executarComando("barreira h 3,4 4,5");
+        cliente.executarComando("n");
+        assertEquals(0, colocacoes);
+        assertSame(antes, servico.consultarEstado().jogo());
+        cliente.executarComando("mover 2 5");
+        assertEquals(new Posicao(1, 4), remoto.consultarEstado().jogo().getJogadores().get(0).getPosicao());
+    }
+
+    @Test
+    void respostaInvalidaMantemPropostaEnquantoAtualizacoesContinuam() throws Exception {
+        StringWriter saida = new StringWriter();
+        Cliente cliente = cliente(saida, "");
+        assertTrue(cliente.iniciarSessao("Aluno", ""));
+        cliente.executarComando("barreira h 3,4 4,5");
+        cliente.executarComando("talvez");
+        remoto.registrar();
+        cliente.atualizar(false);
+        assertEquals(0, colocacoes);
+        String atual = saida.toString().substring(saida.toString().lastIndexOf("Quoridor RMI"));
+        assertTrue(atual.contains("Registrados: 2/4"));
+        assertTrue(atual.contains("*******"));
+        assertTrue(atual.contains("Confirmar posicionamento? (S/N)"));
+        cliente.executarComando("N");
+    }
+
+    @Test
+    void confirmacaoDePropostaIlegalExibeRecusaDoServidor() throws Exception {
+        StringWriter saida = new StringWriter();
+        Cliente cliente = cliente(saida, "");
+        assertTrue(cliente.iniciarSessao("Aluno", ""));
+        for (int i = 0; i < 3; i++) { remoto.registrar(); }
+        remoto.colocarBarreira(remoto.reconectar(extrairToken(saida.toString())).token(), 2, 3, Orientacao.HORIZONTAL);
+        EstadoJogo antes = servico.consultarEstado().jogo();
+        // O jogador 1 já gastou seu turno; a confirmação ainda deve ser julgada pelo servidor.
+        cliente.executarComando("barreira v 3,4 4,5");
+        cliente.executarComando("S");
+        assertEquals(1, colocacoes);
+        assertSame(antes, servico.consultarEstado().jogo());
+        assertTrue(saida.toString().contains("Erro:"));
+    }
+
+    private String extrairToken(String texto) {
+        return texto.substring(texto.indexOf("Seu token: ") + "Seu token: ".length()).split(" ")[0];
+    }
+
+    @Test
+    void eofComPropostaPendenteCancelaSemEnviarAcao() throws Exception {
+        StringWriter saida = new StringWriter();
+        cliente(saida, "Aluno\n\nbarreira h 3,4 4,5\n").executar();
+        assertEquals(0, colocacoes);
+        assertTrue(remoto.consultarEstado().jogo().getBarreiras().isEmpty());
+        assertTrue(saida.toString().contains("Cliente encerrado"));
     }
 }

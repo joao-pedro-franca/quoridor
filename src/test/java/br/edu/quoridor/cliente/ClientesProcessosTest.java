@@ -56,7 +56,9 @@ class ClientesProcessosTest {
     @AfterEach
     void encerrarProcessosERecursosRmi() throws Exception {
         try {
-            for (ProcessoCliente processo : processos) { processo.close(); }
+            // Tenta limpar todos os processos mesmo se a limpeza de um deles falhar.
+            assertAll(processos.stream().map(processo ->
+                    (org.junit.jupiter.api.function.Executable) processo::close));
         } finally {
             try {
                 if (servico != null) { servico.close(); }
@@ -79,7 +81,10 @@ class ClientesProcessosTest {
         processos.get(0).aguardar("OK:");
         assertEquals(new Posicao(1, 4), servico.consultarEstado().jogo().getJogadores().get(0).getPosicao());
         for (int i = 1; i < 4; i++) { processos.get(i).aguardar("Turno: jogador 2"); }
-        processos.get(1).enviar("barreira V 4 4");
+        processos.get(1).enviar("barreira V 4,5 4,5");
+        processos.get(1).aguardar("Confirmar posicionamento? (S/N)");
+        assertTrue(servico.consultarEstado().jogo().getBarreiras().isEmpty());
+        processos.get(1).enviar("S");
         processos.get(1).aguardar("OK:");
         assertEquals(1, servico.consultarEstado().jogo().getBarreiras().size());
         ProcessoCliente quinto = novoCliente("Quinto", "");
@@ -165,9 +170,17 @@ class ClientesProcessosTest {
         @Override
         public void close() throws InterruptedException {
             entrada.close(); // EOF também deve encerrar o laço do cliente.
-            if (!processo.waitFor(5, TimeUnit.SECONDS)) {
-                processo.destroyForcibly();
-                assertTrue(processo.waitFor(5, TimeUnit.SECONDS));
+            try {
+                if (!processo.waitFor(5, TimeUnit.SECONDS)) {
+                    processo.destroyForcibly();
+                    assertTrue(processo.waitFor(5, TimeUnit.SECONDS));
+                }
+            } finally {
+                // Também destrói e aguarda quando o teste foi interrompido por timeout.
+                if (processo.isAlive()) {
+                    processo.destroyForcibly();
+                    assertTrue(processo.waitFor(5, TimeUnit.SECONDS));
+                }
             }
         }
     }
